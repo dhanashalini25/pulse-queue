@@ -14,7 +14,7 @@ services:
       - key: REDIS_URL
         fromService:
           name: pulse-queue-redis
-          type: redis
+          type: keyvalue
           property: connectionString
       - key: DASHBOARD_USER
         sync: false
@@ -39,7 +39,7 @@ services:
       - key: REDIS_URL
         fromService:
           name: pulse-queue-redis
-          type: redis
+          type: keyvalue
           property: connectionString
       - key: WORKER_CONCURRENCY
         value: 5
@@ -48,11 +48,8 @@ services:
       - key: JOB_BACKOFF_DELAY_MS
         value: 2000
 
-databases: []
-
-# Managed Redis instance used by both services above
-# (Render provisions this automatically when referenced via fromService)
-redis:
-  - name: pulse-queue-redis
+  # Managed Key Value (Redis-compatible) instance used by both services above
+  - type: keyvalue
+    name: pulse-queue-redis
     plan: free
     ipAllowList: []
