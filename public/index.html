@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PulseQueue — Distributed Job Processing</title>
+<meta name="description" content="Live operational dashboard for PulseQueue, a distributed background job processing platform." />
+<style>
+  :root {
+    color-scheme: light;
+    --page:        #f9f9f7;
+    --surface:     #fcfcfb;
+    --surface-2:   #f2f1ed;
+    --ink:         #0b0b0b;
+    --ink-2:       #52514e;
+    --ink-muted:   #898781;
+    --grid:        #e1e0d9;
+    --border:      rgba(11,11,11,0.10);
+    --accent:      #2a78d6;
+    --accent-ink:  #ffffff;
+    --good:        #0ca30c;
+    --good-text:   #006300;
+    --warning:     #fab219;
+    --serious:     #ec835a;
+    --critical:    #d03b3b;
+    --shadow:      0 1px 2px rgba(11,11,11,0.04), 0 8px 24px -12px rgba(11,11,11,0.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page:        #0d0d0d;
+      --surface:     #1a1a19;
+      --surface-2:   #212120;
+      --ink:         #ffffff;
+      --ink-2:       #c3c2b7;
+      --ink-muted:   #898781;
+      --grid:        #2c2c2a;
+      --border:      rgba(255,255,255,0.10);
+      --accent:      #3987e5;
+      --accent-ink:  #ffffff;
+      --good:        #0ca30c;
+      --good-text:   #0ca30c;
+      --warning:     #fab219;
+      --serious:     #ec835a;
+      --critical:    #e66767;
+      --shadow:      0 1px 2px rgba(0,0,0,0.3), 0 12px 32px -16px rgba(0,0,0,0.6);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  a { color: inherit; }
+
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 28px 20px 64px;
+  }
+
+  /* ---------- Header ---------- */
+  header.top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 28px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .mark {
+    width: 40px; height: 40px; border-radius: 11px;
+    background: linear-gradient(135deg, #2a78d6, #1baf7a);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: var(--shadow);
+    flex-shrink: 0;
+  }
+  .brand .mark svg { width: 22px; height: 22px; }
+  .brand h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  .brand p { margin: 2px 0 0; font-size: 13px; color: var(--ink-2); }
+
+  .top-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 12px; border-radius: 999px;
+    font-size: 12.5px; font-weight: 600;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    white-space: nowrap;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-muted); flex-shrink: 0; }
+  .dot.live { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); animation: pulse 2s infinite; }
+  .dot.down { background: var(--critical); }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 45%, transparent); }
+    70%  { box-shadow: 0 0 0 6px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 8px 14px; border-radius: 9px;
+    font-size: 13.5px; font-weight: 600;
+    text-decoration: none;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    transition: transform .12s ease, border-color .12s ease;
+  }
+  .btn:hover { border-color: var(--ink-muted); transform: translateY(-1px); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .btn svg { width: 14px; height: 14px; }
+
+  /* ---------- Stat tiles ---------- */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  @media (max-width: 900px) { .stats { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 520px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+  .tile {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+  .tile::before {
+    content: "";
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: var(--tile-color, var(--ink-muted));
+    opacity: .9;
+  }
+  .tile .label {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--ink-2);
+    margin-bottom: 8px;
+  }
+  .tile .label svg { width: 13px; height: 13px; color: var(--tile-color, var(--ink-muted)); flex-shrink: 0; }
+  .tile .value { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+  .tile.waiting   { --tile-color: var(--ink-muted); }
+  .tile.active    { --tile-color: var(--accent); }
+  .tile.completed { --tile-color: var(--good); }
+  .tile.failed    { --tile-color: var(--critical); }
+  .tile.delayed   { --tile-color: var(--warning); }
+  .tile.deadletter{ --tile-color: var(--serious); }
+
+  /* ---------- Panels ---------- */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 820px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .panel-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--grid);
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .panel-head h2 { font-size: 14.5px; margin: 0; }
+  .panel-head .sub { font-size: 11.5px; color: var(--ink-muted); }
+  .panel-body { padding: 16px 18px; }
+
+  /* ---------- Form ---------- */
+  .field { margin-bottom: 13px; }
+  .field label {
+    display: block; font-size: 12px; font-weight: 600; color: var(--ink-2);
+    margin-bottom: 5px;
+  }
+  .field input, .field select, .field textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 13.5px;
+  }
+  .field textarea { resize: vertical; min-height: 64px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    outline: none; border-color: var(--accent);
+  }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .submit-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+  .submit-row .btn { width: 100%; justify-content: center; }
+
+  .toast {
+    font-size: 12.5px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    margin-top: 10px;
+    border: 1px solid var(--border);
+    display: none;
+  }
+  .toast.show { display: block; }
+  .toast.ok { color: var(--good-text); border-color: color-mix(in srgb, var(--good) 40%, var(--border)); background: color-mix(in srgb, var(--good) 10%, transparent); }
+  .toast.err { color: var(--critical); border-color: color-mix(in srgb, var(--critical) 40%, var(--border)); background: color-mix(in srgb, var(--critical) 10%, transparent); }
+
+  /* ---------- Jobs table ---------- */
+  .table-scroll { overflow-x: auto; }
+  table.jobs { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.jobs th {
+    text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--ink-muted); font-weight: 600;
+    padding: 0 10px 8px; border-bottom: 1px solid var(--grid);
+    white-space: nowrap;
+  }
+  table.jobs td {
+    padding: 9px 10px; border-bottom: 1px solid var(--grid);
+    vertical-align: middle; white-space: nowrap;
+  }
+  table.jobs tr:last-child td { border-bottom: none; }
+  table.jobs td.type { font-weight: 600; }
+  table.jobs td.id { color: var(--ink-muted); font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; font-size: 12px; }
+  table.jobs td.payload {
+    color: var(--ink-2); font-family: ui-monospace, monospace; font-size: 11.5px;
+    max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; text-transform: capitalize;
+  }
+  .status-pill .dot { width: 6px; height: 6px; }
+  .status-pill.waiting   { color: var(--ink-2); background: var(--surface-2); }
+  .status-pill.active    { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .status-pill.completed { color: var(--good-text); background: color-mix(in srgb, var(--good) 16%, transparent); }
+  .status-pill.failed    { color: var(--critical); background: color-mix(in srgb, var(--critical) 14%, transparent); }
+  .status-pill.delayed   { color: #a06c00; background: color-mix(in srgb, var(--warning) 22%, transparent); }
+  @media (prefers-color-scheme: dark) { .status-pill.delayed { color: var(--warning); } }
+  .status-pill.paused    { color: var(--ink-2); background: var(--surface-2); }
+
+  .empty-state {
+    padding: 32px 10px; text-align: center; color: var(--ink-muted); font-size: 13px;
+  }
+
+  footer {
+    margin-top: 34px;
+    padding-top: 18px;
+    border-top: 1px solid var(--grid);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    font-size: 12px; color: var(--ink-muted);
+  }
+  footer .links { display: flex; gap: 14px; }
+  footer a { text-decoration: none; }
+  footer a:hover { color: var(--ink); }
+
+  .refresh-note { font-size: 11.5px; color: var(--ink-muted); display: flex; align-items: center; gap: 6px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+
+    <header class="top">
+      <div class="brand">
+        <div class="mark">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 12h4l2-7 4 14 2-7h6" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h1>PulseQueue</h1>
+          <p>Distributed background job processing platform</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <span class="pill" id="health-pill"><span class="dot" id="health-dot"></span><span id="health-text">Checking…</span></span>
+        <a class="btn" id="admin-link" href="/admin/queues" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Admin dashboard
+        </a>
+        <a class="btn primary" href="https://github.com/dhanashalini25/pulse-queue" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.1 3.29 9.42 7.86 10.95.57.1.79-.25.79-.55 0-.27-.01-1.16-.02-2.11-3.2.7-3.87-1.36-3.87-1.36-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.23-1.27-5.23-5.67 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.18a10.9 10.9 0 0 1 5.74 0c2.18-1.49 3.14-1.18 3.14-1.18.63 1.58.24 2.75.12 3.04.73.8 1.17 1.83 1.17 3.08 0 4.41-2.69 5.38-5.25 5.66.42.36.78 1.07.78 2.15 0 1.56-.02 2.81-.02 3.19 0 .3.21.66.8.55A11.53 11.53 0 0 0 23.5 12c0-6.35-5.15-11.5-11.5-11.5Z"/></svg>
+          View on GitHub
+        </a>
+      </div>
+    </header>
+
+    <section class="stats" id="stat-tiles">
+      <div class="tile waiting">
+        <div class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Waiting</div>
+        <div class="value" data-stat="waiting">—</div>
+      </div>
+      <div class="tile active">
+        <div class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>Active</div>
+        <div class="value" data-stat="active">—</div>
+      </div>
+      <div class="tile completed">
+        <div class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12 6 6L20 6"/></svg>Completed</div>
+        <div class="value" data-stat="completed">—</div>
+      </div>
+      <div class="tile failed">
+        <div class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>Failed</div>
+        <div class="value" data-stat="failed">—</div>
+      </div>
+      <div class="tile delayed">
+        <div class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12M6 22h12M6 2c0 5 6 5.5 6 10s-6 5-6 10M18 2c0 5-6 5.5-6 10s6 5 6 10"/></svg>Delayed</div>
+        <div class="value" data-stat="delayed">—</div>
+      </div>
+      <div class="tile deadletter">
+        <div class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.86 2.7 18.14A2 2 0 0 0 4.47 21h15.06a2 2 0 0 0 1.77-2.86L13.7 3.86a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>Dead-letter</div>
+        <div class="value" data-stat="deadletter">—</div>
+      </div>
+    </section>
+
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Submit a test job</h2>
+          <span class="sub">POST /api/jobs</span>
+        </div>
+        <div class="panel-body">
+          <form id="job-form">
+            <div class="field">
+              <label for="f-type">Job type</label>
+              <input id="f-type" name="type" list="type-suggestions" value="email" required />
+              <datalist id="type-suggestions">
+                <option value="email"></option>
+                <option value="report"></option>
+              </datalist>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="f-priority">Priority</label>
+                <select id="f-priority" name="priority">
+                  <option value="critical">Critical</option>
+                  <option value="high">High</option>
+                  <option value="normal" selected>Normal</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="f-delay">Delay (ms)</label>
+                <input id="f-delay" name="delayMs" type="number" min="0" value="0" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="f-payload">Payload (JSON)</label>
+              <textarea id="f-payload" name="payload">{"to": "user@example.com", "subject": "Hello"}</textarea>
+            </div>
+            <div class="submit-row">
+              <button type="submit" class="btn primary">Enqueue job</button>
+            </div>
+            <div class="toast" id="form-toast"></div>
+          </form>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Recent jobs</h2>
+          <span class="refresh-note"><span class="dot live" style="width:6px;height:6px;"></span> auto-refreshing</span>
+        </div>
+        <div class="panel-body" style="padding: 0;">
+          <div class="table-scroll">
+            <table class="jobs">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Priority</th>
+                  <th>Attempts</th>
+                  <th>Payload</th>
+                  <th>Enqueued</th>
+                </tr>
+              </thead>
+              <tbody id="jobs-body">
+                <tr><td colspan="7" class="empty-state">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <span id="last-updated">Connecting…</span>
+      <span class="links">
+        <a href="/health">/health</a>
+        <a href="/api/queue/stats">/api/queue/stats</a>
+        <a href="/admin/queues">/admin/queues</a>
+        <a href="https://github.com/dhanashalini25/pulse-queue">Source</a>
+      </span>
+    </footer>
+
+  </div>
+
+<script src="/app.js" defer></script>
+</body>
+</html>
