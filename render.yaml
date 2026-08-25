@@ -1,0 +1,58 @@
+services:
+  # API service — handles job submission, status queries, and the dashboard
+  - type: web
+    name: pulse-queue-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerCommand: node src/api/server.js
+    plan: free
+    envVars:
+      - key: PORT
+        value: 4000
+      - key: NODE_ENV
+        value: production
+      - key: REDIS_URL
+        fromService:
+          name: pulse-queue-redis
+          type: redis
+          property: connectionString
+      - key: DASHBOARD_USER
+        sync: false
+      - key: DASHBOARD_PASSWORD
+        sync: false
+      - key: RATE_LIMIT_WINDOW_MS
+        value: 60000
+      - key: RATE_LIMIT_MAX
+        value: 100
+    healthCheckPath: /health
+
+  # Worker service — consumes jobs from the queue
+  - type: worker
+    name: pulse-queue-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerCommand: node src/worker/worker.js
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: REDIS_URL
+        fromService:
+          name: pulse-queue-redis
+          type: redis
+          property: connectionString
+      - key: WORKER_CONCURRENCY
+        value: 5
+      - key: JOB_DEFAULT_ATTEMPTS
+        value: 3
+      - key: JOB_BACKOFF_DELAY_MS
+        value: 2000
+
+databases: []
+
+# Managed Redis instance used by both services above
+# (Render provisions this automatically when referenced via fromService)
+redis:
+  - name: pulse-queue-redis
+    plan: free
+    ipAllowList: []
