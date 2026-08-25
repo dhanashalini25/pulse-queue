@@ -79,4 +79,14 @@ app.listen(PORT, () => {
   logger.info(`Dashboard available at http://localhost:${PORT}/admin/queues`);
 });
 
+// --- Optional embedded worker ---
+// On hosts where only a single (free) service is available, set EMBED_WORKER=true
+// to run the BullMQ worker in this same process instead of as a separate service.
+// Local dev / docker-compose keep the API and worker as independent processes by
+// leaving this unset (see README for details on the tradeoffs).
+if (process.env.EMBED_WORKER === 'true') {
+  require('../worker/worker');
+  logger.info('Embedded worker started in-process (EMBED_WORKER=true)');
+}
+
 module.exports = app;
