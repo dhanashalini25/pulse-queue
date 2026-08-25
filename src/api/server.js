@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -21,6 +22,9 @@ app.use(helmet());
 app.use(cors());
 app.use(compression());
 app.use(express.json({ limit: '1mb' }));
+
+// --- Static UI (public/) — the operational dashboard at "/" ---
+app.use(express.static(path.join(__dirname, '../../public')));
 
 // --- Monitoring dashboard (Bull Board) with basic auth ---
 const dashboardUser = process.env.DASHBOARD_USER || 'admin';
@@ -56,7 +60,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'pulse-queue', timestamp: new Date().toISOString() });
 });
 
-app.get('/', (req, res) => {
+app.get('/api/info', (req, res) => {
   res.json({
     service: 'PulseQueue',
     description: 'Distributed background job processing platform',
